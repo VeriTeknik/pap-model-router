@@ -49,8 +49,7 @@ docker run -p 8080:8080 \
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `MODEL_ROUTER_JWT_SECRET` | Yes | JWT secret (same as pluggedin-app) |
-| `MODEL_ROUTER_ADMIN_TOKEN` | Yes | Admin token for pluggedin-app sync |
+| `MODEL_ROUTER_JWT_SECRET` | Yes | JWT secret (same as pluggedin-app, used for both user and admin auth) |
 | `PORT` | No | Server port (default: 8080) |
 | `SERVICE_VERSION` | No | Version for health check (default: 1.0.0) |
 | `SERVICE_REGION` | No | Region identifier (default: default) |
@@ -130,11 +129,11 @@ curl -X POST http://localhost:8080/v1/chat/completions \
 
 ### POST /admin/sync
 
-Sync enabled models from pluggedin-app. Requires admin token authentication.
+Sync enabled models from pluggedin-app. Requires JWT with `admin: true` claim.
 
 ```bash
 curl -X POST http://localhost:8080/admin/sync \
-  -H "Authorization: Bearer <admin-token>" \
+  -H "Authorization: Bearer <admin-jwt-token>" \
   -H "Content-Type: application/json" \
   -d '{
     "models": [
@@ -148,6 +147,10 @@ curl -X POST http://localhost:8080/admin/sync \
   }'
 ```
 
+The admin JWT must have:
+- `iss`: "plugged.in"
+- `admin`: true
+
 Response:
 ```json
 {
@@ -159,11 +162,11 @@ Response:
 
 ### GET /admin/models
 
-Get currently synced models (for debugging). Requires admin token authentication.
+Get currently synced models (for debugging). Requires JWT with `admin: true` claim.
 
 ```bash
 curl http://localhost:8080/admin/models \
-  -H "Authorization: Bearer <admin-token>"
+  -H "Authorization: Bearer <admin-jwt-token>"
 ```
 
 ## Registering with plugged.in

@@ -72,22 +72,15 @@ export async function authenticateToken(
 }
 
 /**
- * Admin token authentication
- * Uses a simple shared secret for admin endpoints (pluggedin-app sync)
+ * Admin JWT authentication
+ * Verifies JWT with admin:true claim for admin endpoints (pluggedin-app sync)
  */
-export function adminAuth(
+export async function adminAuth(
   req: Request,
   res: Response,
   next: NextFunction
-): void {
+): Promise<void> {
   const authHeader = req.headers.authorization;
-  const adminToken = process.env.MODEL_ROUTER_ADMIN_TOKEN;
-
-  if (!adminToken) {
-    console.error('[AdminAuth] MODEL_ROUTER_ADMIN_TOKEN not configured');
-    res.status(500).json({ error: 'Admin authentication not configured' });
-    return;
-  }
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     res.status(401).json({ error: 'Authorization header with Bearer token is required' });
@@ -96,12 +89,32 @@ export function adminAuth(
 
   const token = authHeader.substring(7).trim();
 
-  if (token !== adminToken) {
-    res.status(403).json({ error: 'Invalid admin token' });
-    return;
-  }
+  try {
+    const secret = getJwtSecret();
+    const { payload } = await jwtVerify(token, secret, {
+      issuer: 'plugged.in',
+    });
 
-  next();
+    // Check for admin claim
+    if (!payload.admin) {
+      res.status(403).json({ error: 'Admin access required' });
+      return;
+    }
+
+    req.user = payload as unknown as JWTPayload;
+    next();
+  } catch (error) {
+    console.error('[AdminAuth] Token verification failed:', error);
+
+    if (error instanceof Error) {
+      if (error.message.includes('expired')) {
+        res.status(401).json({ error: 'Token expired' });
+        return;
+      }
+    }
+
+    res.status(401).json({ error: 'Invalid token' });
+  }
 }
 
 /**
