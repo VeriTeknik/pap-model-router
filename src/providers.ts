@@ -112,6 +112,39 @@ const MODEL_ALIASES: Record<string, string> = {
   'deepseek': 'deepseek-chat',
 };
 
+// Synced models from pluggedin-app (updated via /admin/sync)
+// This takes priority over the static MODEL_PROVIDER_MAP
+const syncedModelsProvider = new Map<string, Provider>();
+
+/**
+ * Register a synced model with its provider
+ * Called from /admin/sync endpoint
+ */
+export function registerSyncedModel(modelId: string, provider: string): void {
+  const normalizedProvider = provider.toLowerCase() as Provider;
+  if (['openai', 'anthropic', 'google', 'xai', 'deepseek'].includes(normalizedProvider)) {
+    syncedModelsProvider.set(modelId, normalizedProvider);
+    console.log(`[Providers] Registered synced model: ${modelId} -> ${normalizedProvider}`);
+  } else {
+    console.warn(`[Providers] Unknown provider for model ${modelId}: ${provider}`);
+  }
+}
+
+/**
+ * Clear all synced models (called before re-sync)
+ */
+export function clearSyncedModels(): void {
+  syncedModelsProvider.clear();
+  console.log('[Providers] Cleared synced models');
+}
+
+/**
+ * Get count of synced models
+ */
+export function getSyncedModelsCount(): number {
+  return syncedModelsProvider.size;
+}
+
 /**
  * Resolve model alias to actual model ID
  */
@@ -121,10 +154,40 @@ export function resolveModelAlias(model: string): string {
 
 /**
  * Get provider for a model
+ * Checks synced models first (from /admin/sync), then falls back to static map
  */
 export function getProviderForModel(model: string): Provider | null {
   const resolvedModel = resolveModelAlias(model);
-  return MODEL_PROVIDER_MAP[resolvedModel] || null;
+
+  // Check synced models first (takes priority)
+  if (syncedModelsProvider.has(resolvedModel)) {
+    return syncedModelsProvider.get(resolvedModel)!;
+  }
+
+  // Fall back to static map
+  if (MODEL_PROVIDER_MAP[resolvedModel]) {
+    return MODEL_PROVIDER_MAP[resolvedModel];
+  }
+
+  // Try to infer provider from model name prefix
+  const lowerModel = resolvedModel.toLowerCase();
+  if (lowerModel.startsWith('gpt-') || lowerModel.startsWith('o1') || lowerModel.startsWith('o3')) {
+    return 'openai';
+  }
+  if (lowerModel.startsWith('claude')) {
+    return 'anthropic';
+  }
+  if (lowerModel.startsWith('gemini')) {
+    return 'google';
+  }
+  if (lowerModel.startsWith('grok')) {
+    return 'xai';
+  }
+  if (lowerModel.startsWith('deepseek')) {
+    return 'deepseek';
+  }
+
+  return null;
 }
 
 /**
@@ -136,11 +199,26 @@ export function isProviderEnabled(provider: Provider): boolean {
 
 /**
  * Get list of available models
+ * Combines synced models with static models
  */
 export function getAvailableModels(): Array<{ id: string; provider: Provider }> {
-  return Object.entries(MODEL_PROVIDER_MAP)
-    .filter(([, provider]) => isProviderEnabled(provider))
-    .map(([id, provider]) => ({ id, provider }));
+  const models = new Map<string, Provider>();
+
+  // Add synced models first (they take priority)
+  for (const [id, provider] of syncedModelsProvider) {
+    if (isProviderEnabled(provider)) {
+      models.set(id, provider);
+    }
+  }
+
+  // Add static models if not already present
+  for (const [id, provider] of Object.entries(MODEL_PROVIDER_MAP)) {
+    if (isProviderEnabled(provider) && !models.has(id)) {
+      models.set(id, provider);
+    }
+  }
+
+  return Array.from(models.entries()).map(([id, provider]) => ({ id, provider }));
 }
 
 /**

@@ -19,6 +19,9 @@ import {
   resolveModelAlias,
   getProviderForModel,
   isProviderEnabled,
+  registerSyncedModel,
+  clearSyncedModels,
+  getSyncedModelsCount,
 } from './providers.js';
 import type {
   ChatCompletionRequest,
@@ -225,12 +228,16 @@ app.post('/admin/sync', adminAuth, (req: Request, res: Response) => {
 
   // Clear existing synced models and replace with new list
   syncedModels.clear();
+  clearSyncedModels(); // Clear provider routing map too
 
   for (const model of models) {
     if (!model.id || !model.provider) {
       console.warn(`[AdminSync] Skipping invalid model: ${JSON.stringify(model)}`);
       continue;
     }
+
+    // Register in provider routing map for dynamic routing
+    registerSyncedModel(model.id, model.provider);
 
     syncedModels.set(model.id, {
       model_id: model.id,
@@ -240,7 +247,7 @@ app.post('/admin/sync', adminAuth, (req: Request, res: Response) => {
     });
   }
 
-  console.log(`[AdminSync] Synced ${syncedModels.size} models from pluggedin-app`);
+  console.log(`[AdminSync] Synced ${syncedModels.size} models from pluggedin-app (${getSyncedModelsCount()} registered for routing)`);
 
   res.json({
     success: true,
