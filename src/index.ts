@@ -156,8 +156,9 @@ app.get('/v1/models', optionalAuth, (_req: Request, res: Response) => {
 /**
  * POST /v1/models/sync - Accept model definitions from Station
  * Required by plugged.in Station for model synchronization
+ * Uses adminAuth to accept admin JWTs from pluggedin-app
  */
-app.post('/v1/models/sync', authenticateToken, (req: Request, res: Response) => {
+app.post('/v1/models/sync', adminAuth, (req: Request, res: Response) => {
   const { models } = req.body as SyncRequest;
 
   if (!Array.isArray(models)) {
@@ -168,7 +169,16 @@ app.post('/v1/models/sync', authenticateToken, (req: Request, res: Response) => 
   const accepted: string[] = [];
   const rejected: Array<{ model_id: string; reason: string }> = [];
 
+  // Clear existing synced models first
+  syncedModels.clear();
+  clearSyncedModels();
+
   for (const model of models) {
+    // Register in provider routing map for dynamic routing
+    if (model.provider) {
+      registerSyncedModel(model.model_id, model.provider);
+    }
+
     // Check if we can route this model
     const provider = getProviderForModel(model.model_id);
 
@@ -198,7 +208,7 @@ app.post('/v1/models/sync', authenticateToken, (req: Request, res: Response) => 
     accepted.push(model.model_id);
   }
 
-  console.log(`[Sync] Accepted ${accepted.length} models, rejected ${rejected.length}`);
+  console.log(`[Sync] Accepted ${accepted.length} models, rejected ${rejected.length} (${getSyncedModelsCount()} registered for routing)`);
 
   const response: SyncResponse = { accepted, rejected };
   res.json(response);
